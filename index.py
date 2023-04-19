@@ -24,18 +24,18 @@ def fetch_stats_data():
         'register': '2'
     }
 
-    # 创建一个 requests 会话，以便在多个请求之间保持 Cookie
+    # 创建一个requests，保持Cookie
     session = requests.Session()
 
     # 模拟登录
     session.post(login_url, data=login_data)
 
-    # 获取前七天的日期
+    # 获取七天
     today = datetime.now()
     date_list = [(today - timedelta(days=i)).strftime('%Y-%m-%d')
                  for i in range(1, 8)]
 
-    # 请求统计数据接口并保存结果
+    # 统计数据接口
     stats_url = 'https://v6.51.la/api/report/trend/chainList'
     stats_data = []
 
@@ -64,7 +64,7 @@ def fetch_stats_data():
             daily_stats = response.json()
             stats_data.append(daily_stats["bean"])
 
-    # 准备将数据保存到 DataFrame 中
+    # 将数据保存到DataFrame
     data = []
 
     for stats in stats_data:
@@ -75,12 +75,12 @@ def fetch_stats_data():
         data.append([stats["curTime"], stats["curPv"], stats["curSv"],
                     stats["curUv"], stats["curIp"], bounce_rate, avg_duration])
 
-    # 创建 DataFrame
+    # 创建DataFrame
     columns = ["日期", "浏览次数（PV）", "日活跃用户",
                "独立访客（UV）", "每日IP（IP数）", "跳出率", "访问时长"]
     df = pd.DataFrame(data, columns=columns)
 
-    # 将 DataFrame 保存为 Excel 文件并转换为字节流
+    # 将 DataFrame保存为Excel
     print(df)
     df.to_excel("stats.xlsx", index=False)
     return df
@@ -90,7 +90,7 @@ def fetch_stats_data():
 async def static(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     df = fetch_stats_data()
 
-    # 将 DataFrame 保存为字节流
+    # 将DataFrame保存为字节流
     output = io.BytesIO()
     file_name = "统计.xlsx"
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -122,13 +122,13 @@ async def static(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # 将字节流的文件指针移到开头
     output.seek(0)
 
-    # 将字节流传递给 reply_document
+    # 将字节流传递给reply_document
     await update.message.reply_document(document=output, filename=file_name)
 
     os.remove(file_name)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(f'每天8点')
+    await update.message.reply_text(f'统计代码')
 
 
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -136,7 +136,7 @@ async def error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 app = ApplicationBuilder().token(YOUR_API_TOKEN).build()
 
-app.add_handler(CommandHandler("Start", start))
+app.add_handler(CommandHandler("test", start))
 
 app.add_handler(CommandHandler("Static", static))
 
