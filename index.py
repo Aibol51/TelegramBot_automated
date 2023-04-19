@@ -78,7 +78,7 @@ async def fetch_stats_data(update: Update,placeholder_message) -> pd.DataFrame:
 
     for stats in stats_data:
         bounce_rate = "{:.2%}".format(stats["curBounceRate"])
-        avg_duration = "{:02}:{:02}".format(
+        avg_duration = "00:{:02}:{:02}".format(
             *divmod(round(stats["curAvgDuration"] / 1000), 60))
 
         data.append([stats["curTime"], stats["curPv"], stats["curSv"],
@@ -105,12 +105,15 @@ def plot_dataframe(df):
     mpl.rcParams['font.sans-serif'] = ['Microsoft YaHei']
     mpl.rcParams['axes.unicode_minus'] = False
 
-    fig = plt.figure(figsize=(4, 2), dpi=800)  # 修改了figsize参数，使其符合 Telegram 要求
+    fig = plt.figure(figsize=(5, 2), dpi=800)  # 修改了figsize参数，使其符合 Telegram 要求
     ax = fig.add_subplot(111, frame_on=False)
     ax.xaxis.set_visible(False)
     ax.yaxis.set_visible(False)
 
-    table(ax, df, loc='center')
+    cell_text = df.to_numpy().tolist()  # 将 DataFrame 转换为列表
+    columns = df.columns
+
+    tbl = ax.table(cellText=cell_text, colLabels=columns, loc='center')  # 使用自定义数据创建表格
 
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
