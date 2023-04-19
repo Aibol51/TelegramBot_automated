@@ -1,9 +1,9 @@
-import requests
-import json
+import asyncio
+import requests 
 from datetime import datetime, timedelta
 import pandas as pd
 import matplotlib.pyplot as plt
-import os
+from pandas.plotting import table 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import io
@@ -13,7 +13,7 @@ YOUR_API_TOKEN = '6175545283:AAGTNAZfExDenLTkNlgk7y2HDhc7FjOIJts'
 YOUR_CHAT_ID = '6000226899'
 
 
-def fetch_stats_data():
+async def fetch_stats_data(update: Update,placeholder_message) -> pd.DataFrame:
     # 登录接口和参数
     login_url = 'https://user.51.la/api/user/login'
     login_data = {
@@ -29,6 +29,9 @@ def fetch_stats_data():
 
     # 模拟登录
     session.post(login_url, data=login_data)
+
+    # 创建占位符消息
+    placeholder_message = await update.message.reply_text("正在获取数据 (0/7) 完成")
 
     # 获取七天
     today = datetime.now()
@@ -57,6 +60,12 @@ def fetch_stats_data():
         }
 
         response = session.post(stats_url, data=params)
+
+        await asyncio.sleep(1)
+        
+        # 更新占位符消息
+        await placeholder_message.edit_text(f"正在获取数据... ({i + 1}/7) 完成")
+        
         if response.status_code != 200:
             print(f"请求失败，状态码：{response.status_code}")
             print(response.text)
@@ -83,49 +92,47 @@ def fetch_stats_data():
     # 将 DataFrame保存为Excel
     print(df)
     df.to_excel("stats.xlsx", index=False)
+
+    
+    # 所有数据获取完成，发送更新的占位符消息
+    await placeholder_message.edit_text("所有数据获取完成，正在生成表格，请稍等...")
+    
     return df
     
 
+def plot_dataframe(df):
+    from pylab import mpl
+    mpl.rcParams['font.sans-serif'] = ['Microsoft YaHei']
+    mpl.rcParams['axes.unicode_minus'] = False
+
+    fig = plt.figure(figsize=(4, 2), dpi=800)  # 修改了figsize参数，使其符合 Telegram 要求
+    ax = fig.add_subplot(111, frame_on=False)
+    ax.xaxis.set_visible(False)
+    ax.yaxis.set_visible(False)
+
+    table(ax, df, loc='center')
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
 
 async def static(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    df = fetch_stats_data()
+    # 发送占位符消息
+    placeholder_message = await update.message.reply_text("正在获取数据，请稍等...")
+    
+    # 获取数据
+    df = await fetch_stats_data(update,placeholder_message)
+    await placeholder_message.delete()
+    # 将 DataFrame 生成图片
+    image_buf = plot_dataframe(df)
 
-    # 将DataFrame保存为字节流
-    output = io.BytesIO()
-    file_name = "统计.xlsx"
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
+    # 发送图片
+    await update.message.reply_photo(photo=image_buf)
+    
 
-        # 获取工作表对象以设置列宽
-        worksheet = writer.sheets['Sheet1']
-
-        # 计算每列的最大字符宽度
-        max_widths = []
-        for idx, col in enumerate(df.columns):
-            # 计算列名的字符宽度并添加额外宽度
-            max_col_width = len(str(col)) + 5  # 在这里添加额外宽度
-
-            # 计算该列所有单元格的字符宽度
-            for value in df.iloc[:, idx]:
-                max_col_width = max(max_col_width, len(str(value)))
-
-            # 将计算的最大字符宽度添加到列表中
-            max_widths.append(max_col_width)
-
-        # 设置每列的宽度
-        for idx, width in enumerate(max_widths):
-            # 设置列宽，增加一点额外宽度以避免文本被截断
-            worksheet.set_column(idx, idx, width + 2)
-
-        writer.book.close()
-
-    # 将字节流的文件指针移到开头
-    output.seek(0)
-
-    # 将字节流传递给reply_document
-    await update.message.reply_document(document=output, filename=file_name)
-
-    os.remove(file_name)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f'统计代码')
