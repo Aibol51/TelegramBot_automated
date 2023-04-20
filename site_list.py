@@ -7,6 +7,8 @@ from pandas.plotting import table
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, CallbackContext, ContextTypes
 import io
+from asyncio import Semaphore
+
 
 YOUR_API_TOKEN = '5617220143:AAHLElaNN7cOtO0K4RUJDw_FcKEFUvLq7iA'
 YOUR_CHAT_ID = '6000226899'
@@ -55,7 +57,7 @@ async def fetch_stats_data(com_id: str, site_name: str, placeholder_message) -> 
         await asyncio.sleep(1)
 
         # 更新占位符消息
-        await placeholder_message.edit_text(f"正在获取数据... ({i + 1}/7) 完成")
+        await placeholder_message.edit_text(f"正在获取 {site_name} 数据... ({i + 1}/7) 完成")
 
         if response.status_code != 200:
             print(f"请求失败，状态码：{response.status_code}")
@@ -126,7 +128,7 @@ async def choose_site(update: Update, context: CallbackContext) -> None:
     
     keyboard = InlineKeyboardMarkup(build_menu(buttons, n_cols=3))
 
-    await update.message.reply_text('请选择51LA站点:', reply_markup=keyboard)
+    await update.message.reply_text('请选择51LA统计:', reply_markup=keyboard)
 
 
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
@@ -139,7 +141,27 @@ def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
 
 
 
+async def process_site_stats(com_id, site_name, placeholder_message, query):
+    # 使用 async with 限制并发数
+    async with concurrent_limit:
+        # 获取数据
+        df, site_name = await fetch_stats_data(com_id, site_name, placeholder_message)
+
+        # 将 DataFrame 生成图片
+        image_buf = plot_dataframe(df, site_name)
+
+        # 发送图片
+        await query.message.reply_photo(photo=image_buf)
+
+        # 删除占位符消息
+        await placeholder_message.delete()
+
+concurrent_limit = Semaphore(2)
+
 async def handle_site_selection(update: Update, context: CallbackContext) -> None:
+    # 在脚本的全局区域创建一个 Semaphore 对象
+    
+
     query = update.callback_query
     com_id = query.data
     # 创建占位符消息
@@ -153,17 +175,8 @@ async def handle_site_selection(update: Update, context: CallbackContext) -> Non
         await placeholder_message.edit_text("找不到站点名称，请稍后重试")
         return
 
-    # 获取数据
-    df, site_name = await fetch_stats_data(com_id, site_name, placeholder_message)
+    asyncio.create_task(process_site_stats(com_id, site_name, placeholder_message, query))
 
-    # 将 DataFrame 生成图片
-    image_buf = plot_dataframe(df, site_name)
-
-    # 发送图片
-    await query.message.reply_photo(photo=image_buf)
-
-    # 删除占位符消息
-    await placeholder_message.delete()
 
 
 
