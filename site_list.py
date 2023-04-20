@@ -23,7 +23,7 @@ STATS_URL = 'https://v6.51.la/api/report/trend/chainList'
 SITE_LIST_URL = 'https://v6.51.la/api/site/list'
 
 
-async def fetch_stats_data(com_id: str, placeholder_message) -> pd.DataFrame:
+async def fetch_stats_data(com_id: str, site_name: str, placeholder_message) -> pd.DataFrame:
     # 创建一个requests，保持Cookie
     session = requests.Session()
 
@@ -85,7 +85,7 @@ async def fetch_stats_data(com_id: str, placeholder_message) -> pd.DataFrame:
     # 发送获取数据完成的消息
     await placeholder_message.edit_text("所有数据获取完成，正在生成表格，请稍等...")
 
-    return df
+    return df, site_name  # 返回站点名称
 
 
 
@@ -120,10 +120,23 @@ async def choose_site(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("获取站点列表失败，请稍后重试")
         return
 
-    keyboard = [[InlineKeyboardButton(site['name'], callback_data=str(site['comId']))] for site in site_list]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    buttons = []
+    for site in site_list:
+        buttons.append(InlineKeyboardButton(site['name'], callback_data=str(site['comId'])))
+    
+    keyboard = InlineKeyboardMarkup(build_menu(buttons, n_cols=3))
 
-    await update.message.reply_text('请选择站点:', reply_markup=reply_markup)
+    await update.message.reply_text('请选择51LA站点:', reply_markup=keyboard)
+
+
+def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
+    menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
+    if header_buttons:
+        menu.insert(0, header_buttons)
+    if footer_buttons:
+        menu.append(footer_buttons)
+    return menu
+
 
 
 async def handle_site_selection(update: Update, context: CallbackContext) -> None:
@@ -132,19 +145,30 @@ async def handle_site_selection(update: Update, context: CallbackContext) -> Non
     # 创建占位符消息
     placeholder_message = await query.message.reply_text("正在获取数据，请稍等...")
 
+    # 获取站点名称
+    site_list = await fetch_site_list()
+    site_name = next((site['name'] for site in site_list if str(site['comId']) == com_id), None)
+
+    if site_name is None:
+        await placeholder_message.edit_text("找不到站点名称，请稍后重试")
+        return
+
     # 获取数据
-    df = await fetch_stats_data(com_id, placeholder_message)
-    
+    df, site_name = await fetch_stats_data(com_id, site_name, placeholder_message)
 
     # 将 DataFrame 生成图片
-    image_buf = plot_dataframe(df)
+    image_buf = plot_dataframe(df, site_name)
 
     # 发送图片
     await query.message.reply_photo(photo=image_buf)
 
+    # 删除占位符消息
+    await placeholder_message.delete()
 
 
-def plot_dataframe(df):
+
+
+def plot_dataframe(df, site_name):
     from pylab import mpl
     mpl.rcParams['font.sans-serif'] = ['Microsoft YaHei']
     mpl.rcParams['axes.unicode_minus'] = False
@@ -157,7 +181,9 @@ def plot_dataframe(df):
     columns = df.columns
 
     tbl = ax.table(cellText=cell_text, colLabels=columns, loc='center')  # 使用自定义数据创建表格
+    
 
+    ax.set_title(site_name or '')  # 设置表格标题
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
     plt.close(fig)
@@ -169,8 +195,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f'统计代码')
 
 
-async def error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(text=str(context.error))
+async def error(update: Update, context: CallbackContext) -> None:
+    if update.message:
+        await update.message.reply_text(text=str(context.error))
 
 
 app = ApplicationBuilder().token(YOUR_API_TOKEN).build()
@@ -179,7 +206,7 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("tongji", choose_site))
 app.add_handler(CallbackQueryHandler(handle_site_selection))
 
-app.add_error_handler(CommandHandler('error', error))
+app.add_error_handler(error)
 
 app.run_polling()
 
