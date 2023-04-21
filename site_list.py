@@ -9,9 +9,11 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 import io
 from asyncio import Semaphore
 
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 
-YOUR_API_TOKEN = '5617220143:AAHLElaNN7cOtO0K4RUJDw_FcKEFUvLq7iA'
-YOUR_CHAT_ID = '6000226899'
+YOUR_API_TOKEN = '6175545283:AAGTNAZfExDenLTkNlgk7y2HDhc7FjOIJts'
+YOUR_CHAT_ID = '1001908595101'
 
 LOGIN_DATA = {
     'account': '16761780288',
@@ -182,9 +184,9 @@ async def handle_site_selection(update: Update, context: CallbackContext) -> Non
 
 
 def plot_dataframe(df, site_name):
-    from pylab import mpl
-    mpl.rcParams['font.sans-serif'] = ['Microsoft YaHei']
-    mpl.rcParams['axes.unicode_minus'] = False
+    # from pylab import mpl
+    plt.rcParams['font.family'] = 'Noto Sans CJK JP'
+    plt.rcParams['axes.unicode_minus'] = False
     fig = plt.figure(figsize=(5, 2), dpi=800)  # 修改了figsize参数，使其符合 Telegram 要求
     ax = fig.add_subplot(111, frame_on=False)
     ax.xaxis.set_visible(False)
